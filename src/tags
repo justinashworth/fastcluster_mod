@@ -1,0 +1,35 @@
+D_	fastcluster.cpp	/^#define D_(r_,c_) ( D[(static_cast<std::ptrdiff_t>/
+Labels	driver.cpp	/^typedef std::vector<std::string> Labels;$/
+MST_linkage_core	fastcluster.cpp	/^static void MST_linkage_core(const t_index N, cons/
+MST_linkage_core_vector	fastcluster.cpp	/^static void MST_linkage_core_vector(const t_index /
+Mdriver.cpp	driver.cpp	/^int main(int argc, char *argv[]) {$/
+PyInit__fastcluster	fastcluster_python.cpp	/^PyMODINIT_FUNC PyInit__fastcluster(void) {$/
+RatiosMatrix	driver.cpp	/^typedef std::vector<Values> RatiosMatrix;$/
+Values	driver.cpp	/^typedef std::vector<double> Values;$/
+Z_	fastcluster.cpp	/^#define Z_(_r, _c) (Z[(_r)*4 + (_c)])$/
+both_FINITE	fastcluster_R.cpp	/^  #define both_FINITE(a,b) (R_FINITE(a) && R_FINIT/
+both_non_NA	fastcluster_R.cpp	/^  #define both_non_NA(a,b) (!ISNAN(a) && !ISNAN(b)/
+f_average	fastcluster.cpp	/^inline static void f_average( t_float * const b, c/
+f_complete	fastcluster.cpp	/^inline static void f_complete( t_float * const b, /
+f_single	fastcluster.cpp	/^inline static void f_single( t_float * const b, co/
+f_ward	fastcluster.cpp	/^inline static void f_ward( t_float * const b, cons/
+f_weighted	fastcluster.cpp	/^inline static void f_weighted( t_float * const b, /
+fc_isnan	fastcluster.cpp	/^#define fc_isnan(X) ((X)!=(X))$/
+generate_R_dendrogram	fastcluster.cpp	/^void generate_R_dendrogram(int * const merge, doub/
+generate_SciPy_dendrogram	fastcluster_python.cpp	/^static void generate_SciPy_dendrogram(t_float * co/
+generic_linkage	fastcluster.cpp	/^static void generic_linkage(const t_index N, t_flo/
+generic_linkage_vector	fastcluster.cpp	/^static void generic_linkage_vector(const t_index N/
+generic_linkage_vector_alternative	fastcluster.cpp	/^static void generic_linkage_vector_alternative(con/
+init_fastcluster	fastcluster_python.cpp	/^PyMODINIT_FUNC init_fastcluster(void)  {$/
+linkage_vector_wrap	fastcluster_python.cpp	/^static PyObject *linkage_vector_wrap(PyObject * co/
+linkage_wrap	fastcluster_python.cpp	/^static PyObject *linkage_wrap(PyObject * const, Py/
+method_codes	fastcluster.cpp	/^enum method_codes {$/
+node	fastcluster.cpp	/^struct node {$/
+order_nodes	fastcluster.cpp	/^void order_nodes(const int N, const int * const me/
+pearson_correlation	driver.cpp	/^pearson_correlation(Values const & row1, Values co/
+pos_node	fastcluster.cpp	/^struct pos_node {$/
+read_matrix_file	driver.cpp	/^read_matrix_file($/
+size_	fastcluster.cpp	/^#define size_(r_) ( ((r_<N) ? 1 : node_size[r_-N])/
+t_float	fastcluster.cpp	/^typedef double t_float;$/
+t_index	fastcluster.cpp	/^typedef int_fast32_t t_index;$/
+usage_error	driver.cpp	/^void usage_error()$/

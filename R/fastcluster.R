@@ -1,0 +1,102 @@
+#  fastcluster: Fast hierarchical clustering routines for R and Python
+#
+#  Copyright © 2011 Daniel Müllner
+#  <http://danifold.net>
+
+hclust <- function(d, method="complete", members=NULL)
+{
+  # Hierarchical clustering, on raw input data.
+  METHODS <- c("single", "complete", "average", "mcquitty", "ward", "centroid", "median")
+  method <- pmatch(method, METHODS)
+  if (is.na(method))
+    stop("Invalid clustering method.")
+  if (method == -1)
+    stop("Ambiguous clustering method.")
+  dendrogram <- c( .Call(fastcluster, attr(d, "Size"), method, d, members),
+    list(
+      labels = attr(d, "Labels")
+      ,method = METHODS[method]
+      ,call = match.call()
+      ,dist.method = attr(d, "method")
+    )
+  )
+  class(dendrogram) <- "hclust"
+  return (dendrogram)
+}
+
+# Ashworth mod: this performs all resampling in c++ for big, big speedups,
+# including resampling directly from the distances instead of recomputing them every time
+hclust_bootstrap <- function(d, bootstraps=1, method="complete", members=NULL)
+{
+  # Hierarchical clustering, on raw input data.
+  METHODS <- c("single", "complete", "average", "mcquitty", "ward", "centroid", "median")
+  method <- pmatch(method, METHODS)
+  if (is.na(method))
+    stop("Invalid clustering method.")
+  if (method == -1)
+    stop("Ambiguous clustering method.")
+	bootstraps=as.integer(bootstraps)
+	cat('hclust_bootstrap with',bootstraps,'iterations\n')
+  dendrograms <- .Call(fastcluster_bootstrap, attr(d, "Size"), method, d, members, bootstraps)
+#	cat('finished with c/c++\n')
+	dendrograms = lapply(dendrograms, function(x){
+		labels = attr(d,"Labels")
+		labels = labels[x$index]
+		x = c(x, list(
+      labels = labels
+      ,method = METHODS[method]
+      ,call = match.call()
+      ,dist.method = attr(d, "method")
+    ))
+		class(x) = "hclust"
+		x
+  })
+  return (dendrograms)
+}
+
+hclust.vector <- function(X, method='single', members=NULL, metric='euclidean', p=NULL)
+{
+  # Hierarchical clustering, on vector data.
+  METHODS <- c("single", "ward", "centroid", "median")
+  methodidx <- pmatch(method, METHODS)
+  if (is.na(methodidx))
+    stop(paste("Invalid clustering method '", method, "' for vector data.", sep=''))
+  if (methodidx == -1)
+    stop("Ambiguous clustering method.")
+
+  METRICS <- c("euclidean", "maximum", "manhattan", "canberra", "binary",
+               "minkowski")
+  metric = pmatch(metric, METRICS)
+  if (is.na(metric))
+    stop("Invalid metric.")
+  if (metric == -1)
+    stop("Ambiguous metric.")
+
+  if (methodidx!=1 && metric!=1)
+    stop("The Euclidean methods 'ward', 'centroid' and 'median' require the 'euclidean' metric.")
+
+  X <- as.matrix(X)
+
+  dendrogram <- c( .Call(fastcluster_vector, methodidx, metric, X, members, p),
+    list(
+      labels = dimnames(X)[[1L]]
+      ,method = METHODS[methodidx]
+      ,call = match.call()
+      ,dist.method = METRICS[metric]
+    )
+  )
+  class(dendrogram) <- "hclust"
+  return (dendrogram)
+}
+
+fastcluster_correlation_distance = function(mat){
+	if(!is.matrix(mat)) stop('Not a matrix, it is:',class(mat),'with length',length(mat))
+  dd = .Call(fastcluster_pearson_distance, mat, nrow(mat), ncol(mat))
+	class(dd) = 'dist'
+	attr(dd,'Size') = ncol(mat)
+	attr(dd,'Labels') = colnames(mat)
+	attr(dd,'Diag') = F
+	attr(dd,'Upper') = F
+	attr(dd,'call') = 'fastcluster_correlation_distance'
+	return(dd)
+}
