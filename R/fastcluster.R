@@ -24,36 +24,6 @@ hclust <- function(d, method="complete", members=NULL)
   return (dendrogram)
 }
 
-# Ashworth mod: this performs all resampling in c++ for big, big speedups,
-# including resampling directly from the distances instead of recomputing them every time
-hclust_bootstrap <- function(d, bootstraps=1, method="complete", members=NULL)
-{
-  # Hierarchical clustering, on raw input data.
-  METHODS <- c("single", "complete", "average", "mcquitty", "ward", "centroid", "median")
-  method <- pmatch(method, METHODS)
-  if (is.na(method))
-    stop("Invalid clustering method.")
-  if (method == -1)
-    stop("Ambiguous clustering method.")
-	bootstraps=as.integer(bootstraps)
-	cat('hclust_bootstrap with',bootstraps,'iterations\n')
-  dendrograms <- .Call(fastcluster_bootstrap, attr(d, "Size"), method, d, members, bootstraps)
-#	cat('finished with c/c++\n')
-	dendrograms = lapply(dendrograms, function(x){
-		labels = attr(d,"Labels")
-		labels = labels[x$index]
-		x = c(x, list(
-      labels = labels
-      ,method = METHODS[method]
-      ,call = match.call()
-      ,dist.method = attr(d, "method")
-    ))
-		class(x) = "hclust"
-		x
-  })
-  return (dendrograms)
-}
-
 hclust.vector <- function(X, method='single', members=NULL, metric='euclidean', p=NULL)
 {
   # Hierarchical clustering, on vector data.
@@ -90,7 +60,7 @@ hclust.vector <- function(X, method='single', members=NULL, metric='euclidean', 
 }
 
 fastcluster_correlation_distance = function(mat){
-	if(!is.matrix(mat)) stop('Not a matrix, it is:',class(mat),'with length',length(mat))
+	if(!is.matrix(mat)) stop('Not a matrix, it is: ',class(mat),' with nrow ',nrow(mat),' ncol ',ncol(mat),' and length ',length(mat))
   dd = .Call(fastcluster_pearson_distance, mat, nrow(mat), ncol(mat))
 	class(dd) = 'dist'
 	attr(dd,'Size') = ncol(mat)

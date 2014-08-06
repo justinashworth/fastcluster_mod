@@ -1,2 +1,2 @@
 useDynLib(fastcluster, .registration=TRUE)
-export('hclust', 'hclust.vector', 'hclust_bootstrap', 'fastcluster_correlation_distance')
+export('hclust', 'hclust.vector', 'fastcluster_correlation_distance')

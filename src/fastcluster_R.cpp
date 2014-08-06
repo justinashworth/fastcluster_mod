@@ -28,6 +28,9 @@
 #include <algorithm> // for std::stable_sort
 #include <stdexcept> // for std::runtime_error
 #include <string> // for std::string
+#include <list>
+#include <vector>
+//#include <sstream> // can't use sstream because Rinternal.h macro length() clashes with another
 #include <new> // for std::bad_alloc
 #include <exception> // for std::exception
 
@@ -730,201 +733,6 @@ extern "C" {
     return r;
   }
 
-  SEXP fastcluster_bootstrap(SEXP const N_, SEXP const method_, SEXP D_, SEXP members_, SEXP const bootstraps_) {
-    SEXP r = NULL; // return value
-		srand(time(NULL));
-
-    try{
-      /*
-        Input checks
-      */
-      // Parameter N: number of data points
-      PROTECT(N_);
-      if (!IS_INTEGER(N_) || LENGTH(N_)!=1)
-        Rf_error("'N' must be a single integer.");
-      const int N = *INTEGER_POINTER(N_);
-      if (N<2)
-        Rf_error("N must be at least 2.");
-      const std::ptrdiff_t NN = static_cast<std::ptrdiff_t>(N)*(N-1)/2;
-      UNPROTECT(1); // N_
-
-      // Parameter boots: number of bootstraps
-      PROTECT(bootstraps_);
-      if (!IS_INTEGER(bootstraps_) || LENGTH(bootstraps_)!=1)
-        Rf_error("'bootstraps' must be a single integer.");
-      const int boots = *INTEGER_POINTER(bootstraps_);
-      if (boots<1) Rf_error("bootstraps must be at least 1.");
-      UNPROTECT(1); // bootstraps_
-
-      // Parameter method: dissimilarity index update method
-      PROTECT(method_);
-      if (!IS_INTEGER(method_) || LENGTH(method_)!=1)
-        Rf_error("'method' must be a single integer.");
-      const int method = *INTEGER_POINTER(method_) - 1; // index-0 based;
-      if (method<METHOD_METR_SINGLE || method>METHOD_METR_MEDIAN) {
-        Rf_error("Invalid method index.");
-      }
-      UNPROTECT(1); // method_
-
-      // Parameter D_: dissimilarity matrix
-      PROTECT(D_ = AS_NUMERIC(D_));
-      if (LENGTH(D_)!=NN)
-        Rf_error("'D' must have length (N \\choose 2).");
-      const double * const D = NUMERIC_POINTER(D_);
-      UNPROTECT(1); // D_
-
-      /*
-        Clustering step
-      */
-	  	PROTECT(r = NEW_LIST(boots));
-			for(int boot(0); boot<boots; ++boot){
-
-				// resample new indices
-				auto_array_ptr<int> binds;
-				binds.init(N);
-				for(int i(0); i<N; ++i) binds[i] = rand() % N;
-
-				//resampled distance matrix
-      	auto_array_ptr<t_float> D__;
-     	  D__.init(NN);
-				std::ptrdiff_t p(0);
-				for(int i(0); i<(N-1); ++i){
-					for(int j(i+1); j<N; ++j){
-						int ri(binds[i]), rj(binds[j]);
-						if(ri==rj) D__[p] = 0;
-						else{
-							int linear_index(rj-ri-1);
-							for(int k(N-ri); k<N; ++k) linear_index += k;
-							D__[p] = D[linear_index];
-						}
-						++p;
-					}
-				}
-
-      	// Parameter members: number of members in each node
-      	auto_array_ptr<t_float> members;
-      	if (method==METHOD_METR_AVERAGE ||
-      	    method==METHOD_METR_WARD ||
-      	    method==METHOD_METR_CENTROID) {
-      	  members.init(N);
-      	  if (Rf_isNull(members_)) {
-      	    for (t_index i=0; i<N; ++i) members[i] = 1;
-      	  }
-      	  else {
-      	    PROTECT(members_ = AS_NUMERIC(members_));
-      	    if (LENGTH(members_)!=N)
-      	      Rf_error("'members' must have length N.");
-      	    const t_float * const m = NUMERIC_POINTER(members_);
-      	    for (t_index i=0; i<N; ++i) members[i] = m[i];
-      	    UNPROTECT(1); // members
-      	  }
-      	}
-
-	      cluster_result Z2(N-1);
-	      switch (method) {
-	      case METHOD_METR_SINGLE:
-	        MST_linkage_core(N, D__, Z2);
-	        break;
-	      case METHOD_METR_COMPLETE:
-	        NN_chain_core<METHOD_METR_COMPLETE, t_float>(N, D__, NULL, Z2);
-	        break;
-	      case METHOD_METR_AVERAGE:
-	        NN_chain_core<METHOD_METR_AVERAGE, t_float>(N, D__, members, Z2);
-	        break;
-	      case METHOD_METR_WEIGHTED:
-	        NN_chain_core<METHOD_METR_WEIGHTED, t_float>(N, D__, NULL, Z2);
-	        break;
-	      case METHOD_METR_WARD:
-	        NN_chain_core<METHOD_METR_WARD, t_float>(N, D__, members, Z2);
-	        break;
-	      case METHOD_METR_CENTROID:
-	        generic_linkage<METHOD_METR_CENTROID, t_float>(N, D__, members, Z2);
-	        break;
-	      case METHOD_METR_MEDIAN:
-	        generic_linkage<METHOD_METR_MEDIAN, t_float>(N, D__, NULL, Z2);
-	        break;
-	      default:
-	        throw std::runtime_error(std::string("Invalid method."));
-	      }
-
-
-	      SEXP m; // return field "merge"
-	      PROTECT(m = NEW_INTEGER(2*(N-1)));
-	      int * const merge = INTEGER_POINTER(m);
-
-	      SEXP dim_m; // Specify that m is an (N-1)×2 matrix
-	      PROTECT(dim_m = NEW_INTEGER(2));
-	      INTEGER(dim_m)[0] = N-1;
-	      INTEGER(dim_m)[1] = 2;
-	      SET_DIM(m, dim_m);
-
-	      SEXP h; // return field "height"
-	      PROTECT(h = NEW_NUMERIC(N-1));
-	      double * const height = NUMERIC_POINTER(h);
-
-	      SEXP o; // return field "order"
-	      PROTECT(o = NEW_INTEGER(N));
-	      int * const order = INTEGER_POINTER(o);
-
-
-	      if (method==METHOD_METR_CENTROID ||
-	          method==METHOD_METR_MEDIAN)
-	        generate_R_dendrogram<true>(merge, height, order, Z2, N);
-	      else
-	        generate_R_dendrogram<false>(merge, height, order, Z2, N);
-
-				SEXP rr;
-	      PROTECT(rr = NEW_LIST(4));
-	      SET_ELEMENT(rr, 0, m);
-	      SET_ELEMENT(rr, 1, h);
-	      SET_ELEMENT(rr, 2, o);
-
-	      SEXP ind; // return field "index"
-	      PROTECT(ind = NEW_INTEGER(N));
-				// R is 1-indexed, so add 1 to binds
-				for(int i(0); i<N; ++i) INTEGER(ind)[i] = binds[i]+1;
-				SET_ELEMENT(rr, 3, ind);
-				UNPROTECT(1); // ind
-
-	      SEXP n; // names
-	      PROTECT(n = NEW_CHARACTER(4));
-	      SET_STRING_ELT(n, 0, COPY_TO_USER_STRING("merge"));
-	      SET_STRING_ELT(n, 1, COPY_TO_USER_STRING("height"));
-	      SET_STRING_ELT(n, 2, COPY_TO_USER_STRING("order"));
-	      SET_STRING_ELT(n, 3, COPY_TO_USER_STRING("index"));
-	      SET_NAMES(rr, n);
-
-				SET_ELEMENT(r, boot, rr);
-	      UNPROTECT(6); // m, dim_m, h, o, rr, n
-
-	      D__.free();     // Free the memory now
-	      members.free();
-				binds.free();
-			}
-			UNPROTECT(1); // r
-
-    } // try
-    catch (const std::bad_alloc&) {
-      Rf_error( "Memory overflow.");
-    }
-    catch(const std::exception& e){
-      Rf_error( 'E' + e.what() );
-    }
-    catch(const nan_error&){
-      Rf_error("NaN dissimilarity value.");
-    }
-    #ifdef FE_INVALID
-    catch(const fenv_error&){
-      Rf_error( "NaN dissimilarity value in intermediate results.");
-    }
-    #endif
-    catch(...){
-      Rf_error( "C++ exception (unknown reason)." );
-    }
-
-    return r;
-  }
-
   SEXP fastcluster_vector(SEXP const method_,
                           SEXP const metric_,
                           SEXP X_,
@@ -1194,7 +1002,6 @@ extern "C" {
     R_CallMethodDef callMethods[]  = {
       {"fastcluster", (DL_FUNC) &fastcluster, 4},
       {"fastcluster_pearson_distance", (DL_FUNC) &fastcluster_pearson_distance, 3},
-      {"fastcluster_bootstrap", (DL_FUNC) &fastcluster_bootstrap, 5},
       {"fastcluster_vector", (DL_FUNC) &fastcluster_vector, 5},
       {NULL, NULL, 0}
     };
