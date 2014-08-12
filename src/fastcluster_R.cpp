@@ -957,21 +957,21 @@ extern "C" {
 				for(int col2(col1+1); col2<end; ++col2){
 					// Pearson correlation distance
 					EX=0, EY=0, EXX=0, EYY=0, EXY=0, x=0, y=0;
-					bool matches(false);
+					unsigned npairs(0);
 					for(int row(0); row<nrow; ++row){
 						// R indexes fills its arrays BY COLUMN
 						x = matrix[col1*nrow+row];
 						y = matrix[col2*nrow+row];
 						if(ISNA(x) || ISNA(y)) continue;
-						matches = true;
+						++npairs;
 						EX += x;
 						EY += y;
 						EXX += x*x;
 						EYY += y*y;
 						EXY += x*y;
 					}
-					if(!matches) d[p++] = 2.0;
-					else d[p++] = 1.0 - (EXY - EX*EY/nrow) / sqrt( (EXX - EX*EX/nrow)*(EYY - EY*EY/nrow) );
+					if(npairs<1) d[p++] = 2.0;
+					else d[p++] = 1.0 - (EXY - EX*EY/npairs) / sqrt( (EXX - EX*EX/npairs)*(EYY - EY*EY/npairs) );
 				}
 			}
 
