@@ -772,14 +772,14 @@ spearman_distances_pairwise_complete_obs(
 			// Pearson distance for the ranks (this is the standard, as in R)
 			t_float EX=0, EY=0, EXX=0, EYY=0, EXY=0;
 			for(size_t i(0); i<ranks.size(); ++i){
-				if(ranks[i].xrank == -1){
-					std::string s = "unset xrank at ind " + std::to_string(ranks[i].ind);
-					Rf_error(s.c_str());
-				}
-				if(ranks[i].yrank == -1){
-					std::string s = "unset yrank at ind " + std::to_string(ranks[i].ind);
-					Rf_error(s.c_str());
-				}
+//				if(ranks[i].xrank == -1){
+//					std::string s = "unset xrank at ind " + std::to_string(ranks[i].ind);
+//					Rf_error(s.c_str());
+//				}
+//				if(ranks[i].yrank == -1){
+//					std::string s = "unset yrank at ind " + std::to_string(ranks[i].ind);
+//					Rf_error(s.c_str());
+//				}
 				EX += ranks[i].xrank;
 				EY += ranks[i].yrank;
 				EXX += ranks[i].xrank * ranks[i].xrank;
