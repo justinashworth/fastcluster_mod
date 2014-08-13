@@ -59,9 +59,10 @@ hclust.vector <- function(X, method='single', members=NULL, metric='euclidean', 
   return (dendrogram)
 }
 
-fastcluster_correlation_distance = function(mat){
+fastcluster_correlation_distance <- function(mat,type=1)
+{
 	if(!is.matrix(mat)) stop('Not a matrix, it is: ',class(mat),' with nrow ',nrow(mat),' ncol ',ncol(mat),' and length ',length(mat))
-  dd = .Call(fastcluster_pearson_distance, mat, nrow(mat), ncol(mat))
+  dd = .Call(fastcluster_correlation_distances, mat, nrow(mat), ncol(mat), as.integer(type))
 	class(dd) = 'dist'
 	attr(dd,'Size') = ncol(mat)
 	attr(dd,'Labels') = colnames(mat)
@@ -70,3 +71,4 @@ fastcluster_correlation_distance = function(mat){
 	attr(dd,'call') = 'fastcluster_correlation_distance'
 	return(dd)
 }
+

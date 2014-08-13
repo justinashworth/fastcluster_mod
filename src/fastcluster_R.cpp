@@ -579,6 +579,221 @@ private:
 #pragma GCC diagnostic pop
 #endif
 
+void
+pearson_distances_pairwise_complete_obs(
+	double * const d,
+	const double * const matrix,
+	int const nrow,
+	int const ncol
+){
+	std::ptrdiff_t p(0);
+	t_float EX(0), EY(0), EXX(0), EYY(0), EXY(0), x(0), y(0);
+	for(int col1(0), end(ncol); col1<(end-1); ++col1){
+		for(int col2(col1+1); col2<end; ++col2){
+			// Pearson correlation distance
+			EX=0, EY=0, EXX=0, EYY=0, EXY=0, x=0, y=0;
+			unsigned npairs(0);
+			for(int row(0); row<nrow; ++row){
+				// R indexes its arrays BY COLUMN
+				x = matrix[col1*nrow+row];
+				y = matrix[col2*nrow+row];
+				if(ISNA(x) || ISNA(y)) continue;
+				++npairs;
+				EX += x;
+				EY += y;
+				EXX += x*x;
+				EYY += y*y;
+				EXY += x*y;
+			}
+			if(npairs<1) d[p++] = 2.0;
+			else d[p++] = 1.0 - (EXY - EX*EY/npairs) / sqrt( (EXX - EX*EX/npairs)*(EYY - EY*EY/npairs) );
+		}
+	}
+}
+
+// variant: means by /nrow rather than /npairs when dealing with missing data
+// deviates from R's pairwise.complete.obs, but highly similar.
+// good results in context of particular biological validations,
+// but formal correctness undetermined
+void
+pearson_distances_pairwise_complete_obs_variant(
+	double * const d,
+	const double * const matrix,
+	int const nrow,
+	int const ncol
+){
+	std::ptrdiff_t p(0);
+	t_float EX(0), EY(0), EXX(0), EYY(0), EXY(0), x(0), y(0);
+	for(int col1(0), end(ncol); col1<(end-1); ++col1){
+		for(int col2(col1+1); col2<end; ++col2){
+			// Pearson correlation distance
+			EX=0, EY=0, EXX=0, EYY=0, EXY=0, x=0, y=0;
+			unsigned npairs(0);
+			for(int row(0); row<nrow; ++row){
+				// R indexes its arrays BY COLUMN
+				x = matrix[col1*nrow+row];
+				y = matrix[col2*nrow+row];
+				if(ISNA(x) || ISNA(y)) continue;
+				++npairs;
+				EX += x;
+				EY += y;
+				EXX += x*x;
+				EYY += y*y;
+				EXY += x*y;
+			}
+			if(npairs<1) d[p++] = 2.0;
+			else d[p++] = 1.0 - (EXY - EX*EY/nrow) / sqrt( (EXX - EX*EX/nrow)*(EYY - EY*EY/nrow) );
+		}
+	}
+}
+
+struct Rank{
+	double x;
+	double y;
+	int ind;
+	double xrank;
+	double yrank;
+};
+
+bool sortbyx(Rank const & a, Rank const & b){return a.x < b.x;}
+bool sortbyy(Rank const & a, Rank const & b){return a.y < b.y;}
+
+typedef std::vector<Rank> Ranks;
+
+// numerically equivalent but much, much faster than R's version [cor(,method='spearman',use='pairwise.complete.obs')]
+void
+spearman_distances_pairwise_complete_obs(
+	double * const d,
+	const double * const matrix,
+	int const nrow,
+	int const ncol
+){
+	std::ptrdiff_t p(0);
+	t_float x(0), y(0);
+	for(int col1(0), end(ncol); col1<(end-1); ++col1){
+		for(int col2(col1+1); col2<end; ++col2){
+			Ranks ranks;
+			for(int row(0); row<nrow; ++row){
+				// R indexes its arrays BY COLUMN
+				x = matrix[col1*nrow+row];
+				y = matrix[col2*nrow+row];
+				if(ISNA(x) || ISNA(y)) continue;
+				Rank rank;
+				rank.x = x;
+				rank.y = y;
+				rank.ind = row;
+				rank.xrank = -1;
+				rank.yrank = -1;
+				ranks.push_back(rank);
+			}
+
+			size_t const nranks(ranks.size());
+			int lastval(0), numtied(1);
+
+			// some code repetition here,  could be refactored?
+			std::sort(ranks.begin(), ranks.end(), sortbyy);
+			for(size_t i(0); i<nranks; ++i){
+				t_float y(ranks[i].y);
+				// first value
+				// ranks are 1-indeyed (though this shouldn't matter?)
+				if(i==0){ranks[i].yrank = i+1; lastval = y; continue;}
+				// non-first value: can be a tie, a tiebreaker, or a non-tiebreaker; and also could be the last value
+				// value is a tie
+				if(y==lastval){ranks[i-1].yrank = -1; ++numtied;}
+				// last value is a tie
+
+				if(i+1==nranks && y==lastval){
+					t_float rank(0);
+					for(size_t ip(i-numtied+1); ip<=i; ++ip) rank += ip+1.0;
+					rank /= numtied;
+					for(size_t ip(i-numtied+1); ip<=i; ++ip) ranks[ip].yrank = rank;
+
+				// value is not a tie
+				} else if (y!=lastval) {
+					ranks[i].yrank = i+1;
+					// value succeeds a tie: process the previous ties
+					if(numtied>1){
+						t_float rank(0);
+						for(size_t ip(i-numtied); ip<i; ++ip) rank += ip+1.0;
+						rank /= numtied;
+						for(size_t ip(i-numtied); ip<i; ++ip) ranks[ip].yrank = rank;
+					}
+					numtied = 1;
+					lastval = y;
+				}
+			}
+
+			lastval = 0; numtied=1;
+			std::sort(ranks.begin(), ranks.end(), sortbyx);
+			for(size_t i(0); i<nranks; ++i){
+				t_float x(ranks[i].x);
+				// first value
+				// ranks are 1-indexed (though this shouldn't matter?)
+				if(i==0){ranks[i].xrank = i+1; lastval = x; continue;}
+				// non-first value: can be a tie, a tiebreaker, or a non-tiebreaker; and also could be the last value
+				// value is a tie
+				if(x==lastval){ranks[i-1].xrank = -1; ++numtied;}
+				// last value is a tie
+
+				if(i+1==nranks && x==lastval){
+					t_float rank(0);
+					for(size_t ip(i-numtied+1); ip<=i; ++ip) rank += ip+1.0;
+					rank /= numtied;
+					for(size_t ip(i-numtied+1); ip<=i; ++ip) ranks[ip].xrank = rank;
+
+				// value is not a tie
+				} else if (x!=lastval) {
+					ranks[i].xrank = i+1;
+					// value succeeds a tie: process the previous ties
+					if(numtied>1){
+						t_float rank(0);
+						for(size_t ip(i-numtied); ip<i; ++ip) rank += ip+1.0;
+						rank /= numtied;
+						for(size_t ip(i-numtied); ip<i; ++ip) ranks[ip].xrank = rank;
+					}
+					numtied = 1;
+					lastval = x;
+				}
+			}
+
+/*
+			std::string output = "ranks are:\n";
+			for(size_t i(0); i<ranks.size(); ++i)
+				output += " i " + std::to_string(i)
+								+ " ind " + std::to_string(ranks[i].ind)
+								+ " x " + std::to_string(ranks[i].x)
+								+ " y " + std::to_string(ranks[i].y)
+								+ " xrank " + std::to_string(ranks[i].xrank)
+								+ " yrank " + std::to_string(ranks[i].yrank)
+								+ "\n";
+			Rf_error(output.c_str());
+*/
+
+			// Pearson distance for the ranks (this is the standard, as in R)
+			t_float EX=0, EY=0, EXX=0, EYY=0, EXY=0;
+			for(size_t i(0); i<ranks.size(); ++i){
+				if(ranks[i].xrank == -1){
+					std::string s = "unset xrank at ind " + std::to_string(ranks[i].ind);
+					Rf_error(s.c_str());
+				}
+				if(ranks[i].yrank == -1){
+					std::string s = "unset yrank at ind " + std::to_string(ranks[i].ind);
+					Rf_error(s.c_str());
+				}
+				EX += ranks[i].xrank;
+				EY += ranks[i].yrank;
+				EXX += ranks[i].xrank * ranks[i].xrank;
+				EYY += ranks[i].yrank * ranks[i].yrank;
+				EXY += ranks[i].xrank * ranks[i].yrank;
+			}
+
+			if(nranks<1) d[p++] = 2.0;
+			else d[p++] = 1.0 - (EXY - EX*EY/nranks) / sqrt( (EXX - EX*EX/nranks)*(EYY - EY*EY/nranks) );
+
+		}
+	}
+}
+
 extern "C" {
   SEXP fastcluster(SEXP const N_, SEXP const method_, SEXP D_, SEXP members_) {
     SEXP r = NULL; // return value
@@ -922,11 +1137,14 @@ extern "C" {
     return r;
   }
 
-  SEXP fastcluster_pearson_distance(SEXP matrix_, SEXP const nrow_, SEXP const ncol_) {
+  SEXP fastcluster_correlation_distances(SEXP matrix_, SEXP const nrow_, SEXP const ncol_, SEXP const type_) {
     SEXP distance = NULL; // return value
 
     try{
-      /* Input checks */
+			PROTECT(type_);
+			const int type = *INTEGER_POINTER(type_);
+			UNPROTECT(1); // type_
+
       PROTECT(nrow_);
       if (!IS_INTEGER(nrow_) || LENGTH(nrow_)!=1) Rf_error("'nrow' must be a single integer.");
       const int nrow = *INTEGER_POINTER(nrow_);
@@ -951,29 +1169,9 @@ extern "C" {
       PROTECT(distance = NEW_NUMERIC(dsize));
       double * const d = NUMERIC_POINTER(distance);
 
-			std::ptrdiff_t p(0);
-			t_float EX(0), EY(0), EXX(0), EYY(0), EXY(0), x(0), y(0);
-			for(int col1(0), end(ncol); col1<(end-1); ++col1){
-				for(int col2(col1+1); col2<end; ++col2){
-					// Pearson correlation distance
-					EX=0, EY=0, EXX=0, EYY=0, EXY=0, x=0, y=0;
-					unsigned npairs(0);
-					for(int row(0); row<nrow; ++row){
-						// R indexes fills its arrays BY COLUMN
-						x = matrix[col1*nrow+row];
-						y = matrix[col2*nrow+row];
-						if(ISNA(x) || ISNA(y)) continue;
-						++npairs;
-						EX += x;
-						EY += y;
-						EXX += x*x;
-						EYY += y*y;
-						EXY += x*y;
-					}
-					if(npairs<1) d[p++] = 2.0;
-					else d[p++] = 1.0 - (EXY - EX*EY/npairs) / sqrt( (EXX - EX*EX/npairs)*(EYY - EY*EY/npairs) );
-				}
-			}
+			if(type==2) pearson_distances_pairwise_complete_obs_variant(d, matrix, nrow, ncol);
+			else if(type==3) spearman_distances_pairwise_complete_obs(d, matrix, nrow, ncol);
+			else pearson_distances_pairwise_complete_obs(d, matrix, nrow, ncol);
 
       UNPROTECT(2); // matrix_ and distance
 
@@ -1001,7 +1199,7 @@ extern "C" {
   {
     R_CallMethodDef callMethods[]  = {
       {"fastcluster", (DL_FUNC) &fastcluster, 4},
-      {"fastcluster_pearson_distance", (DL_FUNC) &fastcluster_pearson_distance, 3},
+      {"fastcluster_correlation_distances", (DL_FUNC) &fastcluster_correlation_distances, 4},
       {"fastcluster_vector", (DL_FUNC) &fastcluster_vector, 5},
       {NULL, NULL, 0}
     };
