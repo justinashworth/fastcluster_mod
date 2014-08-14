@@ -650,7 +650,6 @@ pearson_distances_pairwise_complete_obs_variant(
 struct Rank{
 	double x;
 	double y;
-	int ind;
 	double xrank;
 	double yrank;
 };
@@ -673,21 +672,26 @@ spearman_distances_pairwise_complete_obs(
 	for(int col1(0), end(ncol); col1<(end-1); ++col1){
 		for(int col2(col1+1); col2<end; ++col2){
 			Ranks ranks;
+			unsigned nranks(0);
 			for(int row(0); row<nrow; ++row){
 				// R indexes its arrays BY COLUMN
 				x = matrix[col1*nrow+row];
 				y = matrix[col2*nrow+row];
 				if(ISNA(x) || ISNA(y)) continue;
+				++nranks;
 				Rank rank;
 				rank.x = x;
 				rank.y = y;
-				rank.ind = row;
 				rank.xrank = -1;
 				rank.yrank = -1;
 				ranks.push_back(rank);
 			}
 
-			size_t const nranks(ranks.size());
+			if(nranks<1){
+				d[p++] = 2.0;
+				continue;
+			}
+
 			int lastval(0), numtied(1);
 
 			// some code repetition here,  could be refactored?
@@ -695,7 +699,7 @@ spearman_distances_pairwise_complete_obs(
 			for(size_t i(0); i<nranks; ++i){
 				t_float y(ranks[i].y);
 				// first value
-				// ranks are 1-indeyed (though this shouldn't matter?)
+				// ranks are 1-indexed (though this shouldn't matter?)
 				if(i==0){ranks[i].yrank = i+1; lastval = y; continue;}
 				// non-first value: can be a tie, a tiebreaker, or a non-tiebreaker; and also could be the last value
 				// value is a tie
@@ -760,7 +764,6 @@ spearman_distances_pairwise_complete_obs(
 			std::string output = "ranks are:\n";
 			for(size_t i(0); i<ranks.size(); ++i)
 				output += " i " + std::to_string(i)
-								+ " ind " + std::to_string(ranks[i].ind)
 								+ " x " + std::to_string(ranks[i].x)
 								+ " y " + std::to_string(ranks[i].y)
 								+ " xrank " + std::to_string(ranks[i].xrank)
@@ -772,14 +775,6 @@ spearman_distances_pairwise_complete_obs(
 			// Pearson distance for the ranks (this is the standard, as in R)
 			t_float EX=0, EY=0, EXX=0, EYY=0, EXY=0;
 			for(size_t i(0); i<ranks.size(); ++i){
-//				if(ranks[i].xrank == -1){
-//					std::string s = "unset xrank at ind " + std::to_string(ranks[i].ind);
-//					Rf_error(s.c_str());
-//				}
-//				if(ranks[i].yrank == -1){
-//					std::string s = "unset yrank at ind " + std::to_string(ranks[i].ind);
-//					Rf_error(s.c_str());
-//				}
 				EX += ranks[i].xrank;
 				EY += ranks[i].yrank;
 				EXX += ranks[i].xrank * ranks[i].xrank;
@@ -787,8 +782,7 @@ spearman_distances_pairwise_complete_obs(
 				EXY += ranks[i].xrank * ranks[i].yrank;
 			}
 
-			if(nranks<1) d[p++] = 2.0;
-			else d[p++] = 1.0 - (EXY - EX*EY/nranks) / sqrt( (EXX - EX*EX/nranks)*(EYY - EY*EY/nranks) );
+			d[p++] = 1.0 - (EXY - EX*EY/nranks) / sqrt( (EXX - EX*EX/nranks)*(EYY - EY*EY/nranks) );
 
 		}
 	}
