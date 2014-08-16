@@ -68,7 +68,7 @@ fastcluster_correlation_distance <- function(mat,type=1)
 	attr(dd,'Labels') = colnames(mat)
 	attr(dd,'Diag') = F
 	attr(dd,'Upper') = F
-	attr(dd,'call') = 'fastcluster_correlation_distance'
+	attr(dd,'call') = sprintf('fastcluster_correlation_distance_%i',type)
 	return(dd)
 }
 

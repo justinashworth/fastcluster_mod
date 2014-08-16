@@ -660,6 +660,9 @@ bool sortbyy(Rank const & a, Rank const & b){return a.y < b.y;}
 typedef std::vector<Rank> Ranks;
 
 // numerically equivalent but much, much faster than R's version [cor(,method='spearman',use='pairwise.complete.obs')]
+// code has been profiled: slow steps are sort(x) [35%], sort(y) [35%], and ranks.push_back() [15%]
+// may be possible to speed this up using an unordered list (std::list?) with a faster/lighter-weight sorting method (i.e. std::list.sort())
+// and/or some scary/clever/efficient use of pointers that results in less STL creation/allocation/destruction overhead
 void
 spearman_distances_pairwise_complete_obs(
 	double * const d,
@@ -789,6 +792,151 @@ spearman_distances_pairwise_complete_obs(
 }
 
 extern "C" {
+
+	// for obtaining a fast empirical distribution of mean values for randomly sampled 'clusters'
+	SEXP emp_means(SEXP matrix_, SEXP nrow_, SEXP const cols_, SEXP nsample_, SEXP niter_){
+		SEXP means = NULL;
+		try{
+			srand(time(NULL));
+
+			PROTECT(nrow_ = AS_INTEGER(nrow_));
+			int const nrow = *INTEGER_POINTER(nrow_);
+			UNPROTECT(1);
+
+			PROTECT(cols_);
+			int * const cols = INTEGER_POINTER(cols_);
+			int const ncol = LENGTH(cols_);
+
+			PROTECT(nsample_ = AS_INTEGER(nsample_));
+			int const nsample = *INTEGER_POINTER(nsample_);
+			UNPROTECT(1);
+
+			PROTECT(niter_ = AS_INTEGER(niter_));
+			int const niter = *INTEGER_POINTER(niter_);
+			UNPROTECT(1);
+
+      PROTECT(matrix_ = AS_NUMERIC(matrix_));
+      const double * const matrix = NUMERIC_POINTER(matrix_);
+
+      PROTECT(means = NEW_NUMERIC(niter));
+      double * const meansp = NUMERIC_POINTER(means);
+			t_float val(0), sum(0);
+			int row(0), i(0), j(0);
+
+			for(int iter(0); iter<niter; ++iter){
+				// compute mean over nsample rows for column indices cols
+				// R matrices are filled BY COLUMN
+				sum=0;
+				for(i=0; i<nsample; ++i){
+					row = rand() % nrow;
+					for(j=0; j<ncol; ++j){
+						// R is 1-indexed
+						val = matrix[row+row*cols[j-1]];
+						if(ISNA(val)) continue;
+						sum += val;
+					}
+				}
+				meansp[iter] = sum/nrow/ncol;
+			}
+			UNPROTECT(1); // matrix_
+			UNPROTECT(1); // cols_
+
+			UNPROTECT(1); // means
+		}
+    catch (const std::bad_alloc&) {
+      Rf_error( "Memory overflow.");
+    }
+    catch(const std::exception& e){
+      Rf_error( e.what() );
+    }
+    catch(const nan_error&){
+      Rf_error("NaN dissimilarity value.");
+    }
+    catch(...){
+      Rf_error( "C++ exception (unknown reason)." );
+    }
+
+		return means;
+	}
+
+	// for obtaining a fast empirical distribution of mean differences between two sets of columns for randomly sampled 'clusters'
+	SEXP emp_diffs(SEXP matrix_, SEXP nrow_, SEXP const colsA_, SEXP const colsB_, SEXP nsample_, SEXP niter_){
+		SEXP diffs = NULL;
+		try{
+			srand(time(NULL));
+
+			PROTECT(nrow_ = AS_INTEGER(nrow_));
+			int const nrow = *INTEGER_POINTER(nrow_);
+			UNPROTECT(1);
+
+			PROTECT(colsA_);
+			int * const colsA = INTEGER_POINTER(colsA_);
+			int const ncolA = LENGTH(colsA_);
+
+			PROTECT(colsB_);
+			int * const colsB = INTEGER_POINTER(colsB_);
+			int const ncolB = LENGTH(colsB_);
+
+			PROTECT(nsample_ = AS_INTEGER(nsample_));
+			int const nsample = *INTEGER_POINTER(nsample_);
+			UNPROTECT(1);
+
+			PROTECT(niter_ = AS_INTEGER(niter_));
+			int const niter = *INTEGER_POINTER(niter_);
+			UNPROTECT(1);
+
+      PROTECT(matrix_ = AS_NUMERIC(matrix_));
+      const double * const matrix = NUMERIC_POINTER(matrix_);
+
+      PROTECT(diffs = NEW_NUMERIC(niter));
+      double * const diffsp = NUMERIC_POINTER(diffs);
+			t_float val(0), diff(0), sumA(0), sumB(0);
+			int row(0), i(0), j(0);
+
+			for(int iter(0); iter<niter; ++iter){
+				// compute mean over nsample rows for column indices colsA
+				// R matrices are filled BY COLUMN
+				diff=0;
+				for(i=0; i<nsample; ++i){
+					row = rand() % nrow;
+					sumA=0; sumB=0;
+					for(j=0; j<ncolA; ++j){
+						// R is 1-indexed
+						val = matrix[row+row*colsA[j-1]];
+						if(ISNA(val)) continue;
+						sumA += val;
+					}
+					for(j=0; j<ncolB; ++j){
+						val = matrix[row+row*colsB[j-1]];
+						if(ISNA(val)) continue;
+						sumB += val;
+					}
+					diff += sumB/ncolB - sumA/ncolA;
+				}
+				diffsp[iter] = diff/nrow;
+			}
+			UNPROTECT(1); // matrix_
+			UNPROTECT(1); // colsA_
+			UNPROTECT(1); // colsB_
+
+			UNPROTECT(1); // diffs
+		}
+    catch (const std::bad_alloc&) {
+      Rf_error( "Memory overflow.");
+    }
+    catch(const std::exception& e){
+      Rf_error( e.what() );
+    }
+    catch(const nan_error&){
+      Rf_error("NaN dissimilarity value.");
+    }
+    catch(...){
+      Rf_error( "C++ exception (unknown reason)." );
+    }
+
+		return diffs;
+	}
+
   SEXP fastcluster(SEXP const N_, SEXP const method_, SEXP D_, SEXP members_) {
     SEXP r = NULL; // return value
 
@@ -1193,6 +1341,8 @@ extern "C" {
   {
     R_CallMethodDef callMethods[]  = {
       {"fastcluster", (DL_FUNC) &fastcluster, 4},
+			{"emp_means", (DL_FUNC) &emp_means, 5},
+			{"emp_diffs", (DL_FUNC) &emp_diffs, 6},
       {"fastcluster_correlation_distances", (DL_FUNC) &fastcluster_correlation_distances, 4},
       {"fastcluster_vector", (DL_FUNC) &fastcluster_vector, 5},
       {NULL, NULL, 0}
