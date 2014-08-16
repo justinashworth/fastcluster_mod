@@ -831,12 +831,12 @@ extern "C" {
 					row = rand() % nrow;
 					for(j=0; j<ncol; ++j){
 						// R is 1-indexed
-						val = matrix[row+row*cols[j-1]];
+						val = matrix[row+nrow*(cols[j]-1)];
 						if(ISNA(val)) continue;
 						sum += val;
 					}
 				}
-				meansp[iter] = sum/nrow/ncol;
+				meansp[iter] = sum/nsample/ncol;
 			}
 			UNPROTECT(1); // matrix_
 			UNPROTECT(1); // cols_
@@ -902,18 +902,18 @@ extern "C" {
 					sumA=0; sumB=0;
 					for(j=0; j<ncolA; ++j){
 						// R is 1-indexed
-						val = matrix[row+row*colsA[j-1]];
+						val = matrix[row+nrow*(colsA[j]-1)];
 						if(ISNA(val)) continue;
 						sumA += val;
 					}
 					for(j=0; j<ncolB; ++j){
-						val = matrix[row+row*colsB[j-1]];
+						val = matrix[row+nrow*(colsB[j]-1)];
 						if(ISNA(val)) continue;
 						sumB += val;
 					}
 					diff += sumB/ncolB - sumA/ncolA;
 				}
-				diffsp[iter] = diff/nrow;
+				diffsp[iter] = diff/nsample;
 			}
 			UNPROTECT(1); // matrix_
 			UNPROTECT(1); // colsA_
