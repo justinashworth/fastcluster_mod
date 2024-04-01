@@ -937,6 +937,90 @@ extern "C" {
 		return diffs;
 	}
 
+	// for obtaining a fast empirical distribution of mean differences between two sets of columns for randomly sampled 'clusters'
+	SEXP emp_diffs_meanratio(SEXP matrix_, SEXP nrow_, SEXP const colsA_, SEXP const colsB_, SEXP nsample_, SEXP niter_){
+		SEXP diffs = NULL;
+		try{
+			srand(time(NULL));
+
+			PROTECT(nrow_ = AS_INTEGER(nrow_));
+			int const nrow = *INTEGER_POINTER(nrow_);
+			UNPROTECT(1);
+
+			PROTECT(colsA_);
+			int * const colsA = INTEGER_POINTER(colsA_);
+			int const ncolA = LENGTH(colsA_);
+
+			PROTECT(colsB_);
+			int * const colsB = INTEGER_POINTER(colsB_);
+			int const ncolB = LENGTH(colsB_);
+
+			PROTECT(nsample_ = AS_INTEGER(nsample_));
+			int const nsample = *INTEGER_POINTER(nsample_);
+			UNPROTECT(1);
+
+			PROTECT(niter_ = AS_INTEGER(niter_));
+			int const niter = *INTEGER_POINTER(niter_);
+			UNPROTECT(1);
+
+      PROTECT(matrix_ = AS_NUMERIC(matrix_));
+      const double * const matrix = NUMERIC_POINTER(matrix_);
+
+      PROTECT(diffs = NEW_NUMERIC(niter));
+      double * const diffsp = NUMERIC_POINTER(diffs);
+			t_float val(0), sumratio(0), sumA(0), sumB(0);
+			int row(0), i(0), j(0);
+
+			//niter is the size of the background distribution being calculated
+			for(int iter(0); iter<niter; ++iter){
+				// compute mean over nsample rows for column indices colsA and colsB
+				// R matrices are filled BY COLUMN
+				// each i is a single row, nsample is the number of random row/elements/genes sampled
+				sumratio=0;
+				for(i=0; i<nsample; ++i){
+					row = rand() % nrow;
+					sumA=0; sumB=0;
+					for(j=0; j<ncolA; ++j){
+						// R is 1-indexed, so subtract 1 to get correct index in the values array
+						val = matrix[row+nrow*(colsA[j]-1)];
+						if(ISNA(val)) continue;
+						// summing all values over colsA ('condition A') for all sampled rows
+						sumA += val;
+					}
+					for(j=0; j<ncolB; ++j){
+						val = matrix[row+nrow*(colsB[j]-1)];
+						if(ISNA(val)) continue;
+						// summing all values over colsB ('condition B') for all sampled rows
+						sumB += val;
+					}
+					// rearranged fraction since multiplication is considered faster than division
+					sumratio += (sumB*ncolA)/(sumA*ncolB);
+				}
+				// this is the mean intra-row ratio between colsA and colsB over nsample rows
+				diffsp[iter] = sumratio / nsample;
+			}
+			UNPROTECT(1); // matrix_
+			UNPROTECT(1); // colsA_
+			UNPROTECT(1); // colsB_
+
+			UNPROTECT(1); // diffs
+		}
+    catch (const std::bad_alloc&) {
+      Rf_error( "Memory overflow.");
+    }
+    catch(const std::exception& e){
+      Rf_error( e.what() );
+    }
+    catch(const nan_error&){
+      Rf_error("NaN dissimilarity value.");
+    }
+    catch(...){
+      Rf_error( "C++ exception (unknown reason)." );
+    }
+
+		return diffs;
+	}
+
   SEXP fastcluster(SEXP const N_, SEXP const method_, SEXP D_, SEXP members_) {
     SEXP r = NULL; // return value
 
@@ -1343,6 +1427,7 @@ extern "C" {
       {"fastcluster", (DL_FUNC) &fastcluster, 4},
 			{"emp_means", (DL_FUNC) &emp_means, 5},
 			{"emp_diffs", (DL_FUNC) &emp_diffs, 6},
+			{"emp_diffs_meanratio", (DL_FUNC) &emp_diffs_meanratio, 6},
       {"fastcluster_correlation_distances", (DL_FUNC) &fastcluster_correlation_distances, 4},
       {"fastcluster_vector", (DL_FUNC) &fastcluster_vector, 5},
       {NULL, NULL, 0}
